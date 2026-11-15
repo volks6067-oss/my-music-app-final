@@ -8,14 +8,13 @@ from tkinterdnd2 import DND_FILES, TkinterDnD
 # Инициализация звука
 pygame.mixer.init()
 
-# Кастомный класс, который объединяет CustomTkinter и поддержку Drag&Drop
 class MusicApp(ctk.CTk, TkinterDnD.DnDWrapper):
     def __init__(self):
         super().__init__()
-        self.TkdndVersion = TkinterDnD._require(self) # Активация Drag&Drop
+        self.TkdndVersion = TkinterDnD._require(self)
         
         self.title("VOLK MUSIC PLAYER")
-        self.geometry("1000x700")
+        self.geometry("1000x750") # Чуть увеличили высоту для громкости
         self.configure(fg_color="#0a0a14")
         
         self.tracks = []
@@ -30,7 +29,6 @@ class MusicApp(ctk.CTk, TkinterDnD.DnDWrapper):
         self.sidebar.pack(side="left", fill="y")
         self.sidebar.pack_propagate(False)
 
-        # Заголовок и кнопка +
         header_frame = ctk.CTkFrame(self.sidebar, fg_color="transparent")
         header_frame.pack(fill="x", padx=15, pady=(20, 10))
         
@@ -44,7 +42,6 @@ class MusicApp(ctk.CTk, TkinterDnD.DnDWrapper):
         )
         self.add_btn.pack(side="right")
 
-        # Строка поиска
         self.search_var = tk.StringVar()
         self.search_var.trace("w", self.filter_playlist)
         self.search_entry = ctk.CTkEntry(
@@ -55,7 +52,6 @@ class MusicApp(ctk.CTk, TkinterDnD.DnDWrapper):
         )
         self.search_entry.pack(fill="x", padx=15, pady=(0, 15))
 
-        # Скролл-фрейм для треков
         self.scroll_frame = ctk.CTkScrollableFrame(self.sidebar, fg_color="transparent")
         self.scroll_frame.pack(fill="both", expand=True, padx=10, pady=5)
 
@@ -64,7 +60,7 @@ class MusicApp(ctk.CTk, TkinterDnD.DnDWrapper):
         self.main_frame.pack(side="right", fill="both", expand=True)
 
         self.cover_label = ctk.CTkLabel(self.main_frame, text="🎵", font=ctk.CTkFont(size=120), fg_color="#1a1a24", corner_radius=150, width=250, height=250)
-        self.cover_label.pack(pady=(60, 20))
+        self.cover_label.pack(pady=(40, 20))
 
         self.title_label = ctk.CTkLabel(self.main_frame, text="Ничего не играет", font=ctk.CTkFont(size=28, weight="bold"))
         self.title_label.pack(pady=5)
@@ -72,13 +68,39 @@ class MusicApp(ctk.CTk, TkinterDnD.DnDWrapper):
         self.artist_label = ctk.CTkLabel(self.main_frame, text="Перетащи музыку в окно", text_color="gray", font=ctk.CTkFont(size=18))
         self.artist_label.pack(pady=5)
 
+        # Кнопки управления
         self.controls_frame = ctk.CTkFrame(self.main_frame, fg_color="transparent")
-        self.controls_frame.pack(pady=40)
+        self.controls_frame.pack(pady=20)
 
         ctk.CTkButton(self.controls_frame, text="⏮", width=60, height=60, fg_color="transparent", font=ctk.CTkFont(size=30), command=self.prev_track).pack(side="left", padx=20)
         self.play_btn = ctk.CTkButton(self.controls_frame, text="▶", width=80, height=80, fg_color="#00f3ff", text_color="black", font=ctk.CTkFont(size=36), hover_color="#00c3cc", command=self.toggle_play)
         self.play_btn.pack(side="left", padx=20)
         ctk.CTkButton(self.controls_frame, text="⏭", width=60, height=60, fg_color="transparent", font=ctk.CTkFont(size=30), command=self.next_track).pack(side="left", padx=20)
+
+        # --- ПОЛЗУНОК ГРОМКОСТИ ---
+        self.volume_frame = ctk.CTkFrame(self.main_frame, fg_color="transparent")
+        self.volume_frame.pack(pady=(10, 20))
+        
+        ctk.CTkLabel(self.volume_frame, text="🔊", font=ctk.CTkFont(size=20), text_color="gray").pack(side="left", padx=10)
+        
+        # Ползунок от 0 до 1 (по умолчанию 0.7)
+        self.volume_slider = ctk.CTkSlider(
+            self.volume_frame, from_=0, to=1, 
+            number_of_steps=100, 
+            command=self.change_volume,
+            button_color="#00f3ff",
+            progress_color="#00f3ff",
+            fg_color="#1a1a24"
+        )
+        self.volume_slider.set(0.7) # Громкость по умолчанию 70%
+        self.volume_slider.pack(side="left", padx=10)
+        
+        # Применяем начальную громкость
+        pygame.mixer.music.set_volume(0.7)
+
+    def change_volume(self, value):
+        # Меняем громкость в pygame (значение от 0.0 до 1.0)
+        pygame.mixer.music.set_volume(float(value))
 
     # --- ОКНО ДОБАВЛЕНИЯ ---
     def open_add_modal(self):
@@ -87,15 +109,13 @@ class MusicApp(ctk.CTk, TkinterDnD.DnDWrapper):
         self.modal.geometry("500x400")
         self.modal.configure(fg_color="#12121e")
         self.modal.attributes("-topmost", True)
-        self.modal.grab_set() # Блокирует главное окно, пока открыто это
+        self.modal.grab_set()
 
         ctk.CTkLabel(self.modal, text="Добавление треков", font=ctk.CTkFont(size=20, weight="bold")).pack(pady=20)
 
-        # Зона для перетаскивания
         self.drop_zone = ctk.CTkFrame(self.modal, fg_color="#1a1a24", border_width=2, border_color="#2a2a3e", corner_radius=15, height=150)
         self.drop_zone.pack(fill="x", padx=30, pady=10)
         
-        # Настраиваем зону как цель для Drag&Drop
         self.drop_zone.drop_target_register(DND_FILES)
         self.drop_zone.dnd_bind('<<Drop>>', self.drop_files)
 
@@ -105,7 +125,6 @@ class MusicApp(ctk.CTk, TkinterDnD.DnDWrapper):
         ctk.CTkButton(self.modal, text="Или выбери вручную", fg_color="#2a2a3e", hover_color="#3a3a4e", command=self.select_files).pack(pady=15)
 
     def drop_files(self, event):
-        # Получаем список файлов из события перетаскивания
         files = self.tk.splitlist(event.data)
         valid_files = [f for f in files if f.lower().endswith(('.mp3', '.wav', '.ogg'))]
         
