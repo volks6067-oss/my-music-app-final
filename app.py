@@ -5,7 +5,6 @@ import tkinter as tk
 from tkinter import filedialog
 from tkinterdnd2 import DND_FILES, TkinterDnD
 
-# Инициализация звука
 pygame.mixer.init()
 
 class MusicApp(ctk.CTk, TkinterDnD.DnDWrapper):
@@ -14,14 +13,17 @@ class MusicApp(ctk.CTk, TkinterDnD.DnDWrapper):
         self.TkdndVersion = TkinterDnD._require(self)
         
         self.title("VOLK MUSIC PLAYER")
-        self.geometry("1000x750") # Чуть увеличили высоту для громкости
+        self.geometry("1000x750")
         self.configure(fg_color="#0a0a14")
         
         self.tracks = []
         self.current_index = -1
         self.is_playing = False
+        self.repeat_mode = "all" # "all" или "one"
+        self.track_ended = False  # Флаг для отслеживания конца трека
 
         self.setup_ui()
+        self.check_music_end() # Запускаем вечную проверку
 
     def setup_ui(self):
         # --- ЛЕВАЯ ПАНЕЛЬ ---
@@ -55,7 +57,7 @@ class MusicApp(ctk.CTk, TkinterDnD.DnDWrapper):
         self.scroll_frame = ctk.CTkScrollableFrame(self.sidebar, fg_color="transparent")
         self.scroll_frame.pack(fill="both", expand=True, padx=10, pady=5)
 
-        # --- ПРАВАЯ ПАНЕЛЬ (ПЛЕЕР) ---
+        # --- ПРАВАЯ ПАНЕЛЬ ---
         self.main_frame = ctk.CTkFrame(self, fg_color="#0a0a14")
         self.main_frame.pack(side="right", fill="both", expand=True)
 
@@ -72,18 +74,21 @@ class MusicApp(ctk.CTk, TkinterDnD.DnDWrapper):
         self.controls_frame = ctk.CTkFrame(self.main_frame, fg_color="transparent")
         self.controls_frame.pack(pady=20)
 
-        ctk.CTkButton(self.controls_frame, text="⏮", width=60, height=60, fg_color="transparent", font=ctk.CTkFont(size=30), command=self.prev_track).pack(side="left", padx=20)
-        self.play_btn = ctk.CTkButton(self.controls_frame, text="▶", width=80, height=80, fg_color="#00f3ff", text_color="black", font=ctk.CTkFont(size=36), hover_color="#00c3cc", command=self.toggle_play)
-        self.play_btn.pack(side="left", padx=20)
-        ctk.CTkButton(self.controls_frame, text="⏭", width=60, height=60, fg_color="transparent", font=ctk.CTkFont(size=30), command=self.next_track).pack(side="left", padx=20)
+        # Кнопка повтора (слева)
+        self.repeat_btn = ctk.CTkButton(self.controls_frame, text="🔁", width=50, height=50, fg_color="transparent", font=ctk.CTkFont(size=24), text_color="#00f3ff", command=self.toggle_repeat)
+        self.repeat_btn.pack(side="left", padx=10)
 
-        # --- ПОЛЗУНОК ГРОМКОСТИ ---
+        ctk.CTkButton(self.controls_frame, text="⏮", width=60, height=60, fg_color="transparent", font=ctk.CTkFont(size=30), command=self.prev_track).pack(side="left", padx=10)
+        self.play_btn = ctk.CTkButton(self.controls_frame, text="▶", width=80, height=80, fg_color="#00f3ff", text_color="black", font=ctk.CTkFont(size=36), hover_color="#00c3cc", command=self.toggle_play)
+        self.play_btn.pack(side="left", padx=10)
+        ctk.CTkButton(self.controls_frame, text="⏭", width=60, height=60, fg_color="transparent", font=ctk.CTkFont(size=30), command=self.next_track).pack(side="left", padx=10)
+
+        # Ползунок громкости
         self.volume_frame = ctk.CTkFrame(self.main_frame, fg_color="transparent")
         self.volume_frame.pack(pady=(10, 20))
         
         ctk.CTkLabel(self.volume_frame, text="🔊", font=ctk.CTkFont(size=20), text_color="gray").pack(side="left", padx=10)
         
-        # Ползунок от 0 до 1 (по умолчанию 0.7)
         self.volume_slider = ctk.CTkSlider(
             self.volume_frame, from_=0, to=1, 
             number_of_steps=100, 
@@ -92,15 +97,42 @@ class MusicApp(ctk.CTk, TkinterDnD.DnDWrapper):
             progress_color="#00f3ff",
             fg_color="#1a1a24"
         )
-        self.volume_slider.set(0.7) # Громкость по умолчанию 70%
+        self.volume_slider.set(0.7)
         self.volume_slider.pack(side="left", padx=10)
-        
-        # Применяем начальную громкость
         pygame.mixer.music.set_volume(0.7)
 
     def change_volume(self, value):
-        # Меняем громкость в pygame (значение от 0.0 до 1.0)
         pygame.mixer.music.set_volume(float(value))
+
+    def toggle_repeat(self):
+        # Переключаем режим и меняем иконку
+        if self.repeat_mode == "all":
+            self.repeat_mode = "one"
+            self.repeat_btn.configure(text="🔂", text_color="#ffaa00") # Оранжевый для повтора одной
+        else:
+            self.repeat_mode = "all"
+            self.repeat_btn.configure(text="🔁", text_color="#00f3ff") # Синий для повтора всех
+
+    # --- ПРОВЕРКА КОНЦА ТРЕКА ---
+    def check_music_end(self):
+        # Если музыка играла и внезапно перестала (закончилась)
+        if self.is_playing and not pygame.mixer.music.get_busy() and not self.track_ended:
+            self.track_ended = True
+            
+            if self.repeat_mode == "one":
+                # Повторяем ту же песню
+                self.load_track(self.current_index, play_after=True)
+            else:
+                # Идем к следующей (или к первой, если список кончился)
+                next_idx = (self.current_index + 1) % len(self.tracks)
+                self.load_track(next_idx, play_after=True)
+        
+        # Если музыка снова заиграла, сбрасываем флаг
+        if pygame.mixer.music.get_busy():
+            self.track_ended = False
+
+        # Проверяем каждые 500 мс
+        self.after(500, self.check_music_end)
 
     # --- ОКНО ДОБАВЛЕНИЯ ---
     def open_add_modal(self):
@@ -185,7 +217,6 @@ class MusicApp(ctk.CTk, TkinterDnD.DnDWrapper):
     def filter_playlist(self, *args):
         self.render_playlist()
 
-    # --- УПРАВЛЕНИЕ ---
     def load_track(self, index, play_after=False):
         if not self.tracks: return
         self.current_index = index
@@ -222,6 +253,7 @@ class MusicApp(ctk.CTk, TkinterDnD.DnDWrapper):
                 pygame.mixer.music.unpause()
             self.play_btn.configure(text="⏸")
             self.is_playing = True
+            self.track_ended = False
         except Exception as e:
             print(f"Ошибка: {e}")
 
